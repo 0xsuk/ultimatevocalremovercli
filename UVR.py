@@ -49,6 +49,10 @@ from separate import (
     save_format, clear_gpu_cache,  # Utility functions
     cuda_available, mps_available, #directml_available,
 )
+from my import (
+    make_output_path_from_instrument,
+    is_duplicate
+)
 from playsound import playsound
 from typing import List
 import onnx
@@ -6183,7 +6187,18 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
 
     def process_initialize(self):
         """Verifies the input/output directories are valid and prepares to thread the main process."""
+        print("chosen_process_method_var", self.chosen_process_method_var.get(),
+              "chosen_audio_tool_var", self.chosen_audio_tool_var.get(),
+              "fileOneEntry_var", self.fileOneEntry_var.get(),
+              "fileTwoEntry_var", self.fileTwoEntry_var.get(),
+              "export_path_var", self.export_path_var.get(),
+              "inputPaths", self.inputPaths,
+              "primary stems", self.is_primary_stem_only_var.get(),
+              "secondary stems", self.is_secondary_stem_only_var.get()
+              )
         
+        
+
         if not (
             self.chosen_process_method_var.get() == AUDIO_TOOLS 
             and self.chosen_audio_tool_var.get() in [ALIGN_INPUTS, MATCH_INPUTS] 
@@ -6195,7 +6210,6 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
             self.error_dialoge(INVALID_INPUT)
             return
 
-            
         if not os.path.isdir(self.export_path_var.get()):
             self.error_dialoge(INVALID_EXPORT)
             return
@@ -6251,15 +6265,17 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
 
         if self.thread_check(self.active_processing_thread):
             confirm = messagebox.askyesno(parent=root, title=STOP_PROCESS_CONFIRM[0], message=STOP_PROCESS_CONFIRM[1])
-
+            
             if confirm:
                 try:
                     self.active_processing_thread.terminate()
                 finally:
                     self.is_process_stopped = True
+                    print("Process stopped by user")
                     self.command_Text.write(PROCESS_STOPPED_BY_USER)
         else:
             self.clear_cache_torch = True
+
 
     def process_end(self, error=None):
         """End of process actions"""
@@ -6271,11 +6287,13 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
         self.conversion_Button.configure(state=tk.NORMAL)
         self.progress_bar_main_var.set(0)
 
+        
         if error:
             error_message_box_text = f'{error_dialouge(error)}{ERROR_OCCURED[1]}'
+            print("Process ended with error: ", error_message_box_text)
             confirm = messagebox.askyesno(parent=root,
-                                             title=ERROR_OCCURED[0],
-                                             message=error_message_box_text)
+                                          title=ERROR_OCCURED[0],
+                                          message=error_message_box_text)
             
             if confirm:
                 self.is_confirm_error_var.set(True)
@@ -6285,6 +6303,8 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
             
             if MODEL_MISSING_CHECK in error_message_box_text: 
                 self.update_checkbox_text()
+        else:
+            print("Process ended with no error")                
  
     def process_tool_start(self):
         """Start the conversion for all the given mp3 and wav files"""
@@ -6577,6 +6597,7 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
 
             #print("self.true_model_count", self.true_model_count)
 
+            #NOTE: Getting audio_file here
             for file_num, audio_file in enumerate(inputPaths, start=1):
                 self.cached_sources_clear()
                 base_text = self.process_get_baseText(total_files=inputPath_total_len, file_num=file_num)
@@ -6615,6 +6636,8 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
                         if not os.path.isdir(export_path):os.makedirs(export_path) 
 
                     process_data = {
+                                    'input_paths': inputPaths,
+                                    'file_num': file_num, #this starts from 1
                                     'model_data': current_model, 
                                     'export_path': export_path,
                                     'audio_file_base': audio_file_base,
@@ -7246,8 +7269,42 @@ def extract_stems(audio_file_base, export_path):
 
     return list(set(filtered_lst))
 
-if __name__ == "__main__":
 
+def cli(root):
+    # data is already loaded into root
+    # check load_saved_vars
+    root.inputPaths = ("/home/null/music/The Midnight - Jason (Official Audio) [qIz-9CHVQUc].mp3",) #space is ok
+    root.update_inputPaths() # optional
+    root.export_path_var.set("/home/null/music/test")
+    root.mdx_net_model_var.set("UVR-MDX-NET Main")
+    root.save_format_var.set("MP3")
+    root.chosen_process_method_var.set("MDX-Net")
+    root.is_primary_stem_only_var.set(False)
+    root.is_secondary_stem_only_var.set(False)
+    root.is_gpu_conversion_var.set(True)
+    root.model_sample_mode_var.set(False)
+    
+    input_path = root.inputPaths[0]
+    
+    out_vocal = make_output_path_from_instrument(input_path, root.export_path_var.get(), root.save_format_var.get().lower(), "(Vocal)")
+    out_inst  = make_output_path_from_instrument(input_path, root.export_path_var.get(), root.save_format_var.get().lower(), "(Inst)")
+        
+    print("out", out_vocal, out_inst)
+    no_vocal = is_duplicate(out_vocal)
+    no_inst = is_duplicate(out_inst)
+    if no_vocal and no_inst:
+        print("output files already exist")
+        return
+    if no_vocal:
+        root.is_secondary_stem_only_var.set(True)
+    if no_inst:
+        root.is_primary_stem_only_var.set(True)
+    
+    # root.process_initialize()
+
+    return
+
+if __name__ == "__main__":
     try:
         windll.user32.SetThreadDpiAwarenessContext(wintypes.HANDLE(-1))
     except Exception as e:
@@ -7262,4 +7319,8 @@ if __name__ == "__main__":
     root.update() if is_windows else root.update_idletasks()
     root.deiconify()
     root.configure(bg=BG_COLOR)
+    print("entering mainloop")
+    
+    cli_thread = KThread(target=cli, args=(root,))
+    cli_thread.start()
     root.mainloop()

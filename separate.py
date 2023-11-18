@@ -28,10 +28,14 @@ import pydub
 import soundfile as sf
 import lib_v5.mdxnet as MdxnetSet
 import math
+import hashlib
 #import random
 from onnx import load
 from onnx2pytorch import ConvertModel
 import gc
+from my import (
+    make_output_path
+)
  
 if TYPE_CHECKING:
     from UVR import ModelData
@@ -390,7 +394,10 @@ class SeperateAttributes:
             sf.write(path, source, samplerate, subtype=self.wav_type_set)
 
             if is_not_ensemble:
-                save_format(path, self.save_format, self.mp3_bit_set)
+                input_paths = self.process_data["input_paths"]
+                truepath = input_paths[self.process_data["file_num"] - 1]
+                #NOTE: saved
+                save_format(path, self.save_format, self.mp3_bit_set, truepath)
 
         def save_voc_split_instrumental(stem_name, stem_source, is_inst_invert=False):
             inst_stem_name = "Instrumental (With Lead Vocals)" if stem_name == LEAD_VOCAL_STEM else "Instrumental (With Backing Vocals)"
@@ -1307,32 +1314,41 @@ def rerun_mp3(audio_file, sample_rate=44100):
 
     return librosa.load(audio_file, duration=track_length, mono=False, sr=sample_rate)[0]
 
-def save_format(audio_path, save_format, mp3_bit_set):
+
+def save_format(audio_path, save_format, mp3_bit_set, input_path):
     
-    if not save_format == WAV:
+    save_format = save_format.lower()
+    file_base = os.path.basename(audio_path)
+    export_path = os.path.dirname(audio_path)
+    
+    true_outpath = make_output_path(input_path, export_path, save_format, file_base)
         
-        if OPERATING_SYSTEM == 'Darwin':
-            FFMPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg')
-            pydub.AudioSegment.converter = FFMPEG_PATH
+    if true_outpath == "":
+        print("filebase did not match instrument or vocals. exiting.")
+        return
+    
+    print("saving: ", true_outpath)
+    
+    if OPERATING_SYSTEM == 'Darwin':
+        FFMPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg')
+        pydub.AudioSegment.converter = FFMPEG_PATH
         
-        musfile = pydub.AudioSegment.from_wav(audio_path)
-        
-        if save_format == FLAC:
-            audio_path_flac = audio_path.replace(".wav", ".flac")
-            musfile.export(audio_path_flac, format="flac")  
-        
-        if save_format == MP3:
-            audio_path_mp3 = audio_path.replace(".wav", ".mp3")
-            try:
-                musfile.export(audio_path_mp3, format="mp3", bitrate=mp3_bit_set, codec="libmp3lame")
-            except Exception as e:
-                print(e)
-                musfile.export(audio_path_mp3, format="mp3", bitrate=mp3_bit_set)
-        
+    musfile = pydub.AudioSegment.from_wav(audio_path)
+    
+    if save_format == "mp3":
         try:
-            os.remove(audio_path)
+            musfile.export(true_outpath, format="mp3", bitrate=mp3_bit_set, codec="libmp3lame")
         except Exception as e:
             print(e)
+            musfile.export(true_outpath, format="mp3", bitrate=mp3_bit_set)
+            
+    else:
+        musfile.export(true_outpath, format=save_format)  
+    
+    try:
+        os.remove(audio_path)
+    except Exception as e:
+        print(e)
             
 def pitch_shift(mix):
     new_sr = 31183
