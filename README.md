@@ -1,7 +1,5 @@
 # ultimatevocalremovercli
 
-This provides CLI or RPC to the original GUI.
+python3 UVR.py <input_dir or file> <output_dir>
 
-Although GUI still pops up, you can run the core without touching the GUI via CLI or RPC.
-
-[gui.md](gui.md)
+output file name is made by make_output_path in my.py

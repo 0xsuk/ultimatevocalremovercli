@@ -48,6 +48,7 @@ from separate import (
     SeperateDemucs, SeperateMDX, SeperateMDXC, SeperateVR,  # Model-related
     save_format, clear_gpu_cache,  # Utility functions
     cuda_available, mps_available, #directml_available,
+    get_is_processing, set_is_processing
 )
 from my import (
     make_output_path_from_instrument,
@@ -81,6 +82,10 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
+
+CWD = os.getcwd()
+
+#FUCK
 os.chdir(BASE_PATH)  # Change the current working directory to the base path
 
 SPLASH_DOC = os.path.join(BASE_PATH, 'tmp', 'splash.txt')
@@ -7270,39 +7275,81 @@ def extract_stems(audio_file_base, export_path):
     return list(set(filtered_lst))
 
 
-def cli(root):
+    
+
+root = None
+
+def is_file(filepath):
+    return os.path.exists(filepath) and (not os.path.isdir(filepath))
+
+def cli():
+    if len(sys.argv) < 3:
+        print("need input_path and export_path")
+        os._exit(0)
+        return
+    
+    input_path = os.path.abspath(os.path.join(CWD, os.path.expanduser(sys.argv[1])))
+    export_path = os.path.abspath(os.path.join(CWD, os.path.expanduser(sys.argv[2])))
+    
+    print("input dir or file", input_path)
+    print("output dir", export_path)
+    
+    if not ((i := os.path.exists(input_path)) and (e := os.path.exists(export_path))):
+        print("path does not exist", i, "and", e)
+        os._exit(0)
+    
+    if is_file(input_path):
+        run(input_path, export_path)
+        os._exit(0)
+
+    for file in os.listdir(input_path):
+        while get_is_processing():
+            time.sleep(1)
+        set_is_processing(True)
+        filepath = os.path.join(input_path, file)
+        run(filepath, export_path)
+    
+    os._exit(0)
+
+def run(input_path, export_path, vocal_only=False, inst_only=False, use_gpu=True):
+    print("\n[Input]:", input_path)
+    print("[Export]:", export_path)
+
     # data is already loaded into root
-    # check load_saved_vars
-    root.inputPaths = ("/home/null/music/The Midnight - Jason (Official Audio) [qIz-9CHVQUc].mp3",) #space is ok
+    # check load_saved_vars for variables
+    root.inputPaths = (input_path,) #space is ok
     root.update_inputPaths() # optional
-    root.export_path_var.set("/home/null/music/test")
+    root.export_path_var.set(export_path)
     root.mdx_net_model_var.set("UVR-MDX-NET Main")
     root.save_format_var.set("MP3")
     root.chosen_process_method_var.set("MDX-Net")
-    root.is_primary_stem_only_var.set(False)
-    root.is_secondary_stem_only_var.set(False)
-    root.is_gpu_conversion_var.set(True)
+    root.is_primary_stem_only_var.set(vocal_only)
+    root.is_secondary_stem_only_var.set(inst_only)
+    root.is_gpu_conversion_var.set(use_gpu)
     root.model_sample_mode_var.set(False)
     
-    input_path = root.inputPaths[0]
-    
-    out_vocal = make_output_path_from_instrument(input_path, root.export_path_var.get(), root.save_format_var.get().lower(), "(Vocal)")
-    out_inst  = make_output_path_from_instrument(input_path, root.export_path_var.get(), root.save_format_var.get().lower(), "(Inst)")
-        
-    print("out", out_vocal, out_inst)
-    no_vocal = is_duplicate(out_vocal)
-    no_inst = is_duplicate(out_inst)
-    if no_vocal and no_inst:
-        print("output files already exist")
-        return
-    if no_vocal:
-        root.is_secondary_stem_only_var.set(True)
-    if no_inst:
-        root.is_primary_stem_only_var.set(True)
-    
-    # root.process_initialize()
+    out_vocal = make_output_path_from_instrument(input_path, export_path, root.save_format_var.get().lower(), "(Vocal)")
+    out_inst  = make_output_path_from_instrument(input_path, export_path, root.save_format_var.get().lower(), "(Inst)")
+    vocal_exist = is_duplicate(out_vocal)
+    inst_exist = is_duplicate(out_inst)
 
-    return
+    print("[Vocal]:", out_vocal)
+    print("[Inst] :", out_inst)
+    
+    if vocal_exist: #no matter inst_only or not.
+        print("vocal already exists. skipping.")
+        root.is_primary_stem_only_var.set(False)
+    
+    if inst_exist:
+        print("instrumental already exists. skipping.")
+        root.is_secondary_stem_only_var.set(False)
+    
+    if (vocal_exist and inst_exist) or (vocal_only and vocal_exist) or (inst_only and inst_exist):
+        print("This file is done.")
+        return
+    
+    root.process_initialize()
+    
 
 if __name__ == "__main__":
     try:
@@ -7319,8 +7366,8 @@ if __name__ == "__main__":
     root.update() if is_windows else root.update_idletasks()
     root.deiconify()
     root.configure(bg=BG_COLOR)
-    print("entering mainloop")
     
-    cli_thread = KThread(target=cli, args=(root,))
-    cli_thread.start()
+    t = KThread(target=cli)
+    t.start()
+    print("starting mainloop")
     root.mainloop()

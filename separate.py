@@ -1315,6 +1315,13 @@ def rerun_mp3(audio_file, sample_rate=44100):
     return librosa.load(audio_file, duration=track_length, mono=False, sr=sample_rate)[0]
 
 
+is_processing = False
+def set_is_processing(boolean):
+    global is_processing
+    is_processing= boolean
+def get_is_processing():
+    return is_processing
+
 def save_format(audio_path, save_format, mp3_bit_set, input_path):
     
     save_format = save_format.lower()
@@ -1349,6 +1356,8 @@ def save_format(audio_path, save_format, mp3_bit_set, input_path):
         os.remove(audio_path)
     except Exception as e:
         print(e)
+
+    is_processing = False
             
 def pitch_shift(mix):
     new_sr = 31183
