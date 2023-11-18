@@ -52,7 +52,8 @@ from separate import (
 )
 from my import (
     make_output_path_from_instrument,
-    is_duplicate
+    is_duplicate,
+    list_files
 )
 from playsound import playsound
 from typing import List
@@ -6296,6 +6297,7 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
         if error:
             error_message_box_text = f'{error_dialouge(error)}{ERROR_OCCURED[1]}'
             print("Process ended with error: ", error_message_box_text)
+            set_is_processing(False)
             confirm = messagebox.askyesno(parent=root,
                                           title=ERROR_OCCURED[0],
                                           message=error_message_box_text)
@@ -6310,6 +6312,7 @@ class MainWindow(TkinterDnD.Tk if is_dnd_compatible else tk.Tk):
                 self.update_checkbox_text()
         else:
             print("Process ended with no error")                
+            set_is_processing(False)
  
     def process_tool_start(self):
         """Start the conversion for all the given mp3 and wav files"""
@@ -7279,9 +7282,6 @@ def extract_stems(audio_file_base, export_path):
 
 root = None
 
-def is_file(filepath):
-    return os.path.exists(filepath) and (not os.path.isdir(filepath))
-
 def cli():
     if len(sys.argv) < 3:
         print("need input_path and export_path")
@@ -7298,17 +7298,19 @@ def cli():
         print("path does not exist", i, "and", e)
         os._exit(0)
     
-    if is_file(input_path):
+    if os.path.isfile(input_path):
         run(input_path, export_path)
         os._exit(0)
 
-    for file in os.listdir(input_path):
+    for file in list_files(input_path):
         while get_is_processing():
             time.sleep(1)
         set_is_processing(True)
         filepath = os.path.join(input_path, file)
         run(filepath, export_path)
     
+    while get_is_processing():
+        time.sleep(1)
     os._exit(0)
 
 def run(input_path, export_path, vocal_only=False, inst_only=False, use_gpu=True):
@@ -7328,8 +7330,8 @@ def run(input_path, export_path, vocal_only=False, inst_only=False, use_gpu=True
     root.is_gpu_conversion_var.set(use_gpu)
     root.model_sample_mode_var.set(False)
     
-    out_vocal = make_output_path_from_instrument(input_path, export_path, root.save_format_var.get().lower(), "(Vocal)")
-    out_inst  = make_output_path_from_instrument(input_path, export_path, root.save_format_var.get().lower(), "(Inst)")
+    out_vocal = make_output_path_from_instrument(input_path, export_path, root.save_format_var.get().lower(), "V")
+    out_inst  = make_output_path_from_instrument(input_path, export_path, root.save_format_var.get().lower(), "I")
     vocal_exist = is_duplicate(out_vocal)
     inst_exist = is_duplicate(out_inst)
 
@@ -7346,6 +7348,7 @@ def run(input_path, export_path, vocal_only=False, inst_only=False, use_gpu=True
     
     if (vocal_exist and inst_exist) or (vocal_only and vocal_exist) or (inst_only and inst_exist):
         print("This file is done.")
+        set_is_processing(False)
         return
     
     root.process_initialize()
