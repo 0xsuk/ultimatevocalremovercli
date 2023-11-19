@@ -7300,12 +7300,13 @@ def cli():
     
     if os.path.isfile(input_path):
         run(input_path, export_path)
+        while get_is_processing():
+            time.sleep(1)
         os._exit(0)
 
     for file in list_files(input_path):
         while get_is_processing():
             time.sleep(1)
-        set_is_processing(True)
         filepath = os.path.join(input_path, file)
         run(filepath, export_path)
     
@@ -7314,6 +7315,7 @@ def cli():
     os._exit(0)
 
 def run(input_path, export_path, vocal_only=False, inst_only=False, use_gpu=True):
+    set_is_processing(True)
     print("\n[Input]:", input_path)
     print("[Export]:", export_path)
 

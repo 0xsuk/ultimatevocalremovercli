@@ -1356,8 +1356,6 @@ def save_format(audio_path, save_format, mp3_bit_set, input_path):
         os.remove(audio_path)
     except Exception as e:
         print(e)
-
-    is_processing = False
             
 def pitch_shift(mix):
     new_sr = 31183
